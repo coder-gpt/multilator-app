@@ -6,6 +6,7 @@ import android.os.Handler;
 import com.winlator.R;
 import com.winlator.core.Callback;
 import com.winlator.core.FileUtils;
+import com.winlator.core.StringUtils;
 import com.winlator.core.TarCompressorUtils;
 import com.winlator.core.WineInfo;
 import com.winlator.xenvironment.RootFS;
@@ -103,50 +104,58 @@ public class ContainerManager {
     // ---------------------------------------------------------------
     // STEAM SUPPORT (added)
     // ---------------------------------------------------------------
-    public void installSteamAsync(final Container container, final Runnable callback) {
-        if (container == null) {
-            callback.run();
-            return;
-        }
+    public boolean isSteamInstalled(Container container) {
+        return new File(container.getRootDir(), ".wine/drive_c/Program Files (x86)/Steam/steam.exe").isFile();
+    }
 
+    public void prepareSteamAsync(final Container container, final Callback<File> callback) {
         final Handler handler = new Handler();
         Executors.newSingleThreadExecutor().execute(() -> {
+            File result = null;
             try {
-                File setup = new File(container.getRootDir(), ".wine/drive_c/SteamSetup.exe");
-                URL url = new URL("https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe");
-
-                try (InputStream in = url.openStream();
-                     FileOutputStream out = new FileOutputStream(setup)) {
-                    byte[] buf = new byte[8192];
-                    int n;
-                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                if (isSteamInstalled(container)) {
+                    result = writeShortcut(container, "Steam",
+                        "C:\\Program Files (x86)\\Steam\\steam.exe",
+                        "-no-cef-sandbox -cef-disable-gpu");
                 }
-
-                writeShortcut(container, "Install Steam", "C:\\SteamSetup.exe", "");
-                writeShortcut(container, "Steam",
-                    "C:\\Program Files (x86)\\Steam\\steam.exe",
-                    "-no-cef-sandbox -cef-disable-gpu");
+                else {
+                    File setup = new File(container.getRootDir(), ".wine/drive_c/SteamSetup.exe");
+                    if (!setup.isFile() || setup.length() == 0) {
+                        File part = new File(setup.getPath() + ".part");
+                        URL url = new URL("https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe");
+                        try (InputStream in = url.openStream();
+                             FileOutputStream out = new FileOutputStream(part)) {
+                            byte[] buf = new byte[8192];
+                            int n;
+                            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                        }
+                        part.renameTo(setup);
+                    }
+                    result = writeShortcut(container, "Install Steam", "C:\\SteamSetup.exe", "");
+                }
             }
             catch (IOException e) {}
-            handler.post(callback);
+            final File file = result;
+            handler.post(() -> callback.call(file));
         });
     }
 
-    private void writeShortcut(Container container, String name, String exePath, String args) throws IOException {
+    private File writeShortcut(Container container, String name, String dosPath, String execArgs) throws IOException {
         File desktopDir = new File(container.getUserDir(), "Desktop");
         desktopDir.mkdirs();
+        File file = new File(desktopDir, name + ".desktop");
 
-        // NOTE: This format is a best guess. Make one shortcut by hand in
-        // Winlator, read its .desktop file, and match that format exactly.
         String content = "[Desktop Entry]\n"
             + "Name=" + name + "\n"
-            + "Exec=env WINEPREFIX=\"/home/xuser/.wine\" wine \"" + exePath + "\" " + args + "\n"
+            + "Exec=env WINEPREFIX=\"/home/xuser/.wine\" wine " + StringUtils.escapeDOSPath(dosPath) + "\n"
             + "Type=Application\n"
             + "StartupWMClass=explorer\n";
+        if (!execArgs.isEmpty()) content += "\n[Extra Data]\nexecArgs=" + execArgs + "\n";
 
-        try (FileWriter w = new FileWriter(new File(desktopDir, name + ".desktop"))) {
+        try (FileWriter w = new FileWriter(file)) {
             w.write(content);
         }
+        return file;
     }
     // ---------------------------------------------------------------
 
@@ -323,4 +332,4 @@ public class ContainerManager {
             return TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, file, containerDir);
         }
     }
-        }
+                         }
