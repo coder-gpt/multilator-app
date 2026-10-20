@@ -15,6 +15,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.Executors;
@@ -94,6 +99,56 @@ public class ContainerManager {
             handler.post(callback);
         });
     }
+
+    // ---------------------------------------------------------------
+    // STEAM SUPPORT (added)
+    // ---------------------------------------------------------------
+    public void installSteamAsync(final Container container, final Runnable callback) {
+        if (container == null) {
+            callback.run();
+            return;
+        }
+
+        final Handler handler = new Handler();
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                File setup = new File(container.getRootDir(), ".wine/drive_c/SteamSetup.exe");
+                URL url = new URL("https://cdn.cloudflare.steamstatic.com/client/installer/SteamSetup.exe");
+
+                try (InputStream in = url.openStream();
+                     FileOutputStream out = new FileOutputStream(setup)) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+
+                writeShortcut(container, "Install Steam", "C:\\SteamSetup.exe", "");
+                writeShortcut(container, "Steam",
+                    "C:\\Program Files (x86)\\Steam\\steam.exe",
+                    "-no-cef-sandbox -cef-disable-gpu");
+            }
+            catch (IOException e) {}
+            handler.post(callback);
+        });
+    }
+
+    private void writeShortcut(Container container, String name, String exePath, String args) throws IOException {
+        File desktopDir = new File(container.getUserDir(), "Desktop");
+        desktopDir.mkdirs();
+
+        // NOTE: This format is a best guess. Make one shortcut by hand in
+        // Winlator, read its .desktop file, and match that format exactly.
+        String content = "[Desktop Entry]\n"
+            + "Name=" + name + "\n"
+            + "Exec=env WINEPREFIX=\"/home/xuser/.wine\" wine \"" + exePath + "\" " + args + "\n"
+            + "Type=Application\n"
+            + "StartupWMClass=explorer\n";
+
+        try (FileWriter w = new FileWriter(new File(desktopDir, name + ".desktop"))) {
+            w.write(content);
+        }
+    }
+    // ---------------------------------------------------------------
 
     private Container createContainer(JSONObject data) {
         try {
@@ -268,4 +323,4 @@ public class ContainerManager {
             return TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, file, containerDir);
         }
     }
-}
+        }
