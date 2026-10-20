@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -173,6 +174,11 @@ public class ContainersFragment extends Fragment {
                     case R.id.menu_item_info:
                         (new StorageInfoDialog(activity, container)).show();
                         break;
+                    case R.id.menu_item_install_steam:
+                        Toast.makeText(getContext(), "Downloading Steam...", Toast.LENGTH_SHORT).show();
+                        manager.installSteamAsync(container, () ->
+                            Toast.makeText(getContext(), "Done. Go to Shortcuts and run Install Steam.", Toast.LENGTH_LONG).show());
+                        break;
                 }
                 return true;
             });
@@ -186,4 +192,4 @@ public class ContainersFragment extends Fragment {
             activity.startActivity(intent);
         }
     }
-}
+                }
