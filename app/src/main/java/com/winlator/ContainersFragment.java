@@ -175,9 +175,7 @@ public class ContainersFragment extends Fragment {
                         (new StorageInfoDialog(activity, container)).show();
                         break;
                     case R.id.menu_item_install_steam:
-                        Toast.makeText(getContext(), "Downloading Steam...", Toast.LENGTH_SHORT).show();
-                        manager.installSteamAsync(container, () ->
-                            Toast.makeText(getContext(), "Done. Go to Shortcuts and run Install Steam.", Toast.LENGTH_LONG).show());
+                        runContainer(container);
                         break;
                 }
                 return true;
@@ -186,10 +184,21 @@ public class ContainersFragment extends Fragment {
         }
 
         private void runContainer(Container container) {
-            Activity activity = getActivity();
-            Intent intent = new Intent(activity, XServerDisplayActivity.class);
-            intent.putExtra("container_id", container.id);
-            activity.startActivity(intent);
+            Toast.makeText(getContext(), manager.isSteamInstalled(container)
+                ? "Starting Steam..." : "Downloading Steam installer...", Toast.LENGTH_SHORT).show();
+
+            manager.prepareSteamAsync(container, (shortcutFile) -> {
+                Activity activity = getActivity();
+                if (activity == null) return;
+                if (shortcutFile == null) {
+                    Toast.makeText(activity, "Steam download failed", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                Intent intent = new Intent(activity, XServerDisplayActivity.class);
+                intent.putExtra("container_id", container.id);
+                intent.putExtra("shortcut_path", shortcutFile.getPath());
+                activity.startActivity(intent);
+            });
         }
     }
-                }
+    }
